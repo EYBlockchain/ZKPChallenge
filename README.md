@@ -1,6 +1,6 @@
-### Break the ZKP Protocol Grand Challenge
+# Break the ZKP Protocol Grand Challenge
 
-# What are the ZKP Protocols and what do they help accomplish?
+## What are the ZKP Protocols and what do they help accomplish?
 
 Blockchains will do for networks of enterprises and business ecosystems what enterprise resource planning (ERP) did for the single company. We believe that the current model of siloed and parallel private networks is unsustainable as large companies seek to build overlapping, parallel networks. Rather, a future of large, regional or sector-specific public Ethereum networks is a more realistic future. To enable this future, in a public environment requires alternative ways to bring trust as full transparency is not acceptable for real business operations. It is not yet possible for companies to conduct secure, private transactions across the public Ethereum network.
 
