@@ -23,4 +23,4 @@ They are:
 
 These protocols are used in the movement of any assets and payments on a public blockchain (Ethereum is used here) to ensure privacy.
 
-![Question](https://imgur.com/a/jV8ANef)
+![alt tag](https://imgur.com/a/jV8ANef "Problem")
