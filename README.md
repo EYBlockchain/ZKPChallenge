@@ -1,6 +1,10 @@
-# Break the ZKP Protocol (Grand Challenge)
+# Are Secure Private Transactions on Public Blockchains Really Possible?  Help Us Find Out.
 
-The various ZKP Protocols described below provide privacy on various aspects of a transaction on a public blockchain. The goal is to test the resilience ?? of these protocols.
+The world of blockchain technology is really split in two today.  One the one hand, there are big public networks like Ethereum with billions of dollars of investment and millions of users.  On the other hand, there are thousands of private blockchains run by enterprises.   Enterprise use of public blockchains is very limited because there is no privacy for business transactions or contracts.  
+Our goal at EY is to bridge the gap between public and private blockchains by enabling secure private transactions over public networks using Zero Knowledge Proofs. And we think we don’t it. Maybe.  
+What we are showing (below) is a supply chain solution based on EY’s Ops Chain platform that is used today by private networks for managing and tracking supply chain operations, but all executed on the public network with zero knowledge proofs.
+What you see here is a prototype (We call it the Ops Chain Public Edition Prototype) and we’d like your help in finding the holes in our work.  Can you tell us who so what to whom and how much it cost?
+
 
 ## Aim of the Grand Challenge
 
