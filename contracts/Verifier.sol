@@ -163,13 +163,16 @@ contract Verifier {
         Pairing.G1Point K;
         Pairing.G1Point H;
     }
-    uint[] vector;
-    Pairing.G1Point vk_x = Pairing.G1Point(0, 0);
-    VerifyingKey vk;
+    //uint[] vector; //not used - replaced by a mapping
+    //Pairing.G1Point vk_x = Pairing.G1Point(0, 0); //not used - replaced by a mapping
+    //VerifyingKey private vk; //not used - replaced by a mapping
+    mapping(address => VerifyingKey) private vks;
+    mapping(address => uint[]) private vectors;
+    mapping(address => Pairing.G1Point) private vk_xs;
 
     function setKeyLength(uint l) public {
-      vk.IC.length = l;
-      vector.length = l-1;
+      vks[msg.sender].IC.length = l;
+      vectors[msg.sender].length = l-1;
     }
 
     function loadVerifyingKeyPreamble(
@@ -181,70 +184,91 @@ contract Verifier {
         uint[2][2] gammaBeta2,
         uint[2][2] Z
         ) public {
-      vk.A = Pairing.G2Point([A[0][0],A[0][1]],[A[1][0],A[1][1]]);
-      vk.B = Pairing.G1Point(B[0],B[1]);
-      vk.C = Pairing.G2Point([C[0][0],C[0][1]],[C[1][0],C[1][1]]);
-      vk.gamma = Pairing.G2Point([gamma[0][0],gamma[0][1]],[gamma[1][0],gamma[1][1]]);
-      vk.gammaBeta1 = Pairing.G1Point(gammaBeta1[0],gammaBeta1[1]);
-      vk.gammaBeta2 = Pairing.G2Point([gammaBeta2[0][0],gammaBeta2[0][1]],[gammaBeta2[1][0],gammaBeta2[1][1]]);
-      vk.Z = Pairing.G2Point([Z[0][0],Z[0][1]],[Z[1][0],Z[1][1]]);
+      /**
+      @notice © Copyright 2018 EYGS LLP and/or other members of the global Ernst & Young/EY network; pat. pending.
+      */
+      vks[msg.sender].A = Pairing.G2Point([A[0][0],A[0][1]],[A[1][0],A[1][1]]);
+      vks[msg.sender].B = Pairing.G1Point(B[0],B[1]);
+      vks[msg.sender].C = Pairing.G2Point([C[0][0],C[0][1]],[C[1][0],C[1][1]]);
+      vks[msg.sender].gamma = Pairing.G2Point([gamma[0][0],gamma[0][1]],[gamma[1][0],gamma[1][1]]);
+      vks[msg.sender].gammaBeta1 = Pairing.G1Point(gammaBeta1[0],gammaBeta1[1]);
+      vks[msg.sender].gammaBeta2 = Pairing.G2Point([gammaBeta2[0][0],gammaBeta2[0][1]],[gammaBeta2[1][0],gammaBeta2[1][1]]);
+      vks[msg.sender].Z = Pairing.G2Point([Z[0][0],Z[0][1]],[Z[1][0],Z[1][1]]);
+      //this seems a good place to initialise the vk_x computation
+      vk_xs[msg.sender] = Pairing.G1Point(0, 0); //initialise
+
     }
 
     function loadVerifyingKey(uint[2][] points, uint start) public{
-      vk_x.X =0; vk_x.Y=0; //reset the vk_x computation for next time
+      /**
+      @notice © Copyright 2018 EYGS LLP and/or other members of the global Ernst & Young/EY network; pat. pending.
+      */
+      //vk_xs[addr].X =0; vk_x.Y=0; //reset the vk_x computation for next time
       for (uint i=0; i<points.length; i++){
-        vk.IC[i+start] = Pairing.G1Point(points[i][0],points[i][1]);
+        vks[msg.sender].IC[i+start] = Pairing.G1Point(points[i][0],points[i][1]);
       }
     }
 
     function loadInputVector(uint[] inp, uint start) public {
-      vk_x.X =0; vk_x.Y=0; //reset the vk_x computation for next time
+      /**
+      @notice © Copyright 2018 EYGS LLP and/or other members of the global Ernst & Young/EY network; pat. pending.
+      */
+      //vk_x.X =0; vk_x.Y=0; //reset the vk_x computation for next time
       for (uint i=0; i<inp.length; i++){
-        vector[i+start] = inp[i];
+        vectors[msg.sender][i+start] = inp[i];
       }
     }
-    
     /**
     function to get 64 bits from vector and turn it into a bytes8
     */
-    function getInputBits(uint start) public view returns(bytes8 param) {
+    function getInputBits(uint start, address addr) public view returns(bytes8 param) {
+      /**
+      @notice © Copyright 2018 EYGS LLP and/or other members of the global Ernst & Young/EY network; pat. pending.
+      */
       param = 0x0; bytes8 b = bytes8(1);
       for (uint i=0; i<64; i++){
-        if (vector[i+start] == 1) param = param | (b<<(63-i));
+        if (vectors[addr][i+start] == 1) param = param | (b<<(63-i));
       }
       return param;
     }
 
     function computeVkx(uint start, uint end) public {
+      /**
+      @notice © Copyright 2018 EYGS LLP and/or other members of the global Ernst & Young/EY network; pat. pending.
+      */
       //end needs to be < vector.length
       for (uint i = start; i < end; i++)
-          vk_x = Pairing.addition(vk_x, Pairing.scalar_mul(vk.IC[i + 1], vector[i]));
+          vk_xs[msg.sender] = Pairing.addition(vk_xs[msg.sender], Pairing.scalar_mul(vks[msg.sender].IC[i + 1], vectors[msg.sender][i]));
     }
 
     function getAddress() public returns(address){
       return address(this);
     }
 
-    function verify(Proof proof) internal returns (uint) {
-        require(vector.length + 1 == vk.IC.length);
+    function verify(Proof proof, address addr) internal returns (uint) {
+        require(vectors[addr].length + 1 == vks[addr].IC.length);
         // Compute the linear combination vk_x
-        vk_x = Pairing.addition(vk_x, vk.IC[0]);
-        if (!Pairing.pairingProd2(proof.A, vk.A, Pairing.negate(proof.A_p), Pairing.P2())) return 1;
-        if (!Pairing.pairingProd2(vk.B, proof.B, Pairing.negate(proof.B_p), Pairing.P2())) return 2;
-        if (!Pairing.pairingProd2(proof.C, vk.C, Pairing.negate(proof.C_p), Pairing.P2())) return 3;
+        vk_xs[addr] = Pairing.addition(vk_xs[addr], vks[addr].IC[0]);
+        if (!Pairing.pairingProd2(proof.A, vks[addr].A, Pairing.negate(proof.A_p), Pairing.P2())) return 1;
+        if (!Pairing.pairingProd2(vks[addr].B, proof.B, Pairing.negate(proof.B_p), Pairing.P2())) return 2;
+        if (!Pairing.pairingProd2(proof.C, vks[addr].C, Pairing.negate(proof.C_p), Pairing.P2())) return 3;
         if (!Pairing.pairingProd3(
-            proof.K, vk.gamma,
-            Pairing.negate(Pairing.addition(vk_x, Pairing.addition(proof.A, proof.C))), vk.gammaBeta2,
-            Pairing.negate(vk.gammaBeta1), proof.B
+            proof.K, vks[addr].gamma,
+            Pairing.negate(Pairing.addition(vk_xs[addr], Pairing.addition(proof.A, proof.C))), vks[addr].gammaBeta2,
+            Pairing.negate(vks[addr].gammaBeta1), proof.B
         )) return 4;
         if (!Pairing.pairingProd3(
-                Pairing.addition(vk_x, proof.A), proof.B,
-                Pairing.negate(proof.H), vk.Z,
+                Pairing.addition(vk_xs[addr], proof.A), proof.B,
+                Pairing.negate(proof.H), vks[addr].Z,
                 Pairing.negate(proof.C), Pairing.P2()
         )) return 5;
         return 0;
     }
-    event Verified(string);
+    // @dev Fired by function verifyTx
+    // @param _decodeFlag = dec0de
+    // @param _verified A message to output through this event
+    event Verified(bytes4 indexed _decodeFlag, bytes32 indexed _verified);
+
     function verifyTx(
             uint[2] a,
             uint[2] a_p,
@@ -253,7 +277,8 @@ contract Verifier {
             uint[2] c,
             uint[2] c_p,
             uint[2] h,
-            uint[2] k
+            uint[2] k,
+            address addr
         ) public returns (bool r) {
         Proof memory proof;
         proof.A = Pairing.G1Point(a[0], a[1]);
@@ -264,13 +289,18 @@ contract Verifier {
         proof.C_p = Pairing.G1Point(c_p[0], c_p[1]);
         proof.H = Pairing.G1Point(h[0], h[1]);
         proof.K = Pairing.G1Point(k[0], k[1]);
-        if (verify(proof) == 0) {
-            vk_x.X =0; vk_x.Y=0; //reset the vk_x computation for next time
-            emit Verified("Transaction successfully verified.");
-            return true;
+        bytes4 decodeFlag = 0xdec0de; // flag to tell humans that _verified is a hex encoding of an ascii string
+        bytes32 verified; // a hex encoding of a string - returned by event Verified
+        if (verify(proof, addr) == 0) {
+           vk_xs[addr].X =0; vk_xs[addr].Y=0; //reset the vk_x computation for next time
+           verified = 0x4559204f7073636861696e202d20547820566572696669656421203a29; //"EY Opschain - Tx Verified! :)" in hex
+           emit Verified(decodeFlag, verified);
+           return true;
         } else {
-            vk_x.X =0; vk_x.Y=0; //reset the vk_x computation for next time
-            return false;
+           vk_xs[addr].X =0; vk_xs[addr].Y=0; //reset the vk_x computation for next time
+           verified = 0x4559204f7073636861696e202d205478204e4f54205665726966696564203a28; //"EY Opschain - Tx NOT Verified :(" in hex
+           emit Verified(decodeFlag, verified);
+           return false;
         }
     }
 }

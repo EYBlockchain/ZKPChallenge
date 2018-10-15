@@ -1,10 +1,14 @@
-/*
-Contract to enable the management of hidden Token transactions. Currently it can
+/**
+
+@notice © Copyright 2018 EYGS LLP and/or other members of the global Ernst & Young/EY network; pat. pending.
+
+@title TokenShield V1
+
+Contract to enable the management of hidden non fungible toke transactions. Currently it can
 only cope with tokens that are 8 bytes long. A normal tokenhash is 32 bytes long
-TODO - need to cope with the other 24 bytes
+TODO - need to cope with the other 24 bytes and deeper Merkle tree.
 */
 pragma solidity ^0.4.19;
-//TODO - you can get a way with a single, generic verifier.
 contract Verifier{
   function verifyTx(
           uint[2],
@@ -14,14 +18,16 @@ contract Verifier{
           uint[2],
           uint[2],
           uint[2],
-          uint[2]
+          uint[2],
+          address
           ) public pure returns (bool){}
-  function getInputBits(uint) public view returns(bytes8){}
+  function getInputBits(uint, address) public view returns(bytes8){}
 }
 
 contract TokenShield{
-  bytes8[merkleWidth] ns; //store spent token nullifiers
-  bytes8[merkleWidth] ds; //store the double-spend prevention hashes
+  address public owner;
+  bytes8[merkleWidth] private ns; //store spent token nullifiers
+  bytes8[merkleWidth] private ds; //store the double-spend prevention hashes
   uint constant merkleWidth = 256;
   uint constant merkleDepth = 9;
   uint constant lastRow = merkleDepth-1;
@@ -46,81 +52,98 @@ contract TokenShield{
     uint[2] h;
     uint[2] k;
   }
-  Proof proof;
+
+  mapping(address => Proof) private proofs;
 
   constructor(address mintVerifier, address transferVerifier, address joinVerifier, address splitVerifier) public {
+    //TODO - you can get a way with a single, generic verifier.
+      owner = msg.sender;
       mv = Verifier(mintVerifier);
       tv = Verifier(transferVerifier);
       jv = Verifier(joinVerifier);
       sv = Verifier(splitVerifier);
   }
 
-  function getMintVerifier() returns(address){
+
+  //only owner  modifier
+  modifier onlyOwner () {
+      require(msg.sender == owner);
+      _;
+  }
+
+  /**
+  self destruct added by westlad
+  */
+  function close() public onlyOwner {
+        selfdestruct(owner);
+    }
+
+
+  function getMintVerifier() public view returns(address){
     return address(mv);
   }
 
-  function getTransferVerifier() returns(address){
+  function getTransferVerifier() public view returns(address){
     return address(tv);
   }
 
-  function getJoinVerifier() returns(address){
+  function getJoinVerifier() public view returns(address){
     return address(jv);
   }
 
-  function getSplitVerifier() returns(address){
+  function getSplitVerifier() public view returns(address){
     return address(sv);
   }
 
   /**
   The mint function accepts a Preventifier, H(A), where A is the assetHash; a
   Z token and a proof that both the token and the Preventifier contain A.
-  It's
-  done as an array because the stack on EVM is too small to hold all the locals otherwise.
+  It's done as an array because the stack on EVM is too small to hold all the locals otherwise.
   For the same reason, the proof is set up by calling setProofParams first.
   */
   function mint() public {
     //first, verify the proof
     bool result = mv.verifyTx(
-      proof.a,
-      proof.a_p,
-      proof.b,
-      proof.b_p,
-      proof.c,
-      proof.c_p,
-      proof.h,
-      proof.k);
+      proofs[msg.sender].a,
+      proofs[msg.sender].a_p,
+      proofs[msg.sender].b,
+      proofs[msg.sender].b_p,
+      proofs[msg.sender].c,
+      proofs[msg.sender].c_p,
+      proofs[msg.sender].h,
+      proofs[msg.sender].k,
+      msg.sender);
 
-    require(result); //the proof must check out ok
-    bytes8 d = mv.getInputBits(0); //recover the input params from MintVerifier
-    bytes8 z = mv.getInputBits(128);
+    require(result); //the proof must check out.
+    bytes8 d = mv.getInputBits(0, msg.sender); //recover the input params from MintVerifier
+    bytes8 z = mv.getInputBits(64, msg.sender);
     for (uint i=0; i<zCount; i++) { //check the preventifier doesn't exist
       require(ds[i]!= d);
     }
-    zs[zCount] = z; //add the token
+    zs[zCount] = z; //add the commitment
     ds[zCount++] = d; //add the preventifier
     bytes8 root = merkle(0,0); //work out the Merkle root as it's now different
     currentRootIndex = roots.push(root)-1; //and save it to the list
   }
 
   /**
-  The transfer function transfers a commitment (z-token) to a new owner
+  The transfer function transfers a commitment to a new owner
   */
   function transfer() public {
-    //compute the concatenation of n|pk|r|z so that we can input it into the
-    //verification contract
     bool result = tv.verifyTx(
-      proof.a,
-      proof.a_p,
-      proof.b,
-      proof.b_p,
-      proof.c,
-      proof.c_p,
-      proof.h,
-      proof.k);
+      proofs[msg.sender].a,
+      proofs[msg.sender].a_p,
+      proofs[msg.sender].b,
+      proofs[msg.sender].b_p,
+      proofs[msg.sender].c,
+      proofs[msg.sender].c_p,
+      proofs[msg.sender].h,
+      proofs[msg.sender].k,
+      msg.sender);
     require(result); //the proof must verify. The spice must flow.
-    bytes8 n = tv.getInputBits(0);
-    bytes8 z = tv.getInputBits(192);
-    for (uint i=0; i<nCount; i++) { //check this is an unspent coin
+    bytes8 n = tv.getInputBits(0, msg.sender);
+    bytes8 z = tv.getInputBits(128, msg.sender);
+    for (uint i=0; i<nCount; i++) { //check this is an unspent commitment
       require(ns[i]!=n);
     }
     ns[nCount++] = n; //remember we spent it
@@ -130,25 +153,27 @@ contract TokenShield{
   }
 
   /**
-  The join function joins multiple z-tokens into one z-token and transfers to the public of key recipient specified
+  The join function joins multiple commitments into one z-commitment and
+  transfers to the public of key recipient specified
   */
   function join() public {
     //verification contract
     bool result = jv.verifyTx(
-      proof.a,
-      proof.a_p,
-      proof.b,
-      proof.b_p,
-      proof.c,
-      proof.c_p,
-      proof.h,
-      proof.k);
+      proofs[msg.sender].a,
+      proofs[msg.sender].a_p,
+      proofs[msg.sender].b,
+      proofs[msg.sender].b_p,
+      proofs[msg.sender].c,
+      proofs[msg.sender].c_p,
+      proofs[msg.sender].h,
+      proofs[msg.sender].k,
+      msg.sender);
     require(result); //the proof must verify. The spice must flow.
-    bytes8 na1 = jv.getInputBits(0);
-    bytes8 na2 = jv.getInputBits(64);
-    bytes8 zb = jv.getInputBits(192);
-    bytes8 db = jv.getInputBits(256);
-    for (uint i=0; i<nCount; i++) { //check this is an unspent coin
+    bytes8 na1 = jv.getInputBits(0, msg.sender);
+    bytes8 na2 = jv.getInputBits(64, msg.sender);
+    bytes8 zb = jv.getInputBits(192, msg.sender);
+    bytes8 db = jv.getInputBits(256, msg.sender);
+    for (uint i=0; i<nCount; i++) { //check this is an unspent commitment
       require(ns[i]!=na1 && ns[i]!=na2);
     }
     for (uint j=0; j<zCount; j++) { //check the preventifier doesn't exist
@@ -156,49 +181,48 @@ contract TokenShield{
     }
     ns[nCount++] = na1; //remember we spent it
     ns[nCount++] = na2; //remember we spent it
-    zs[zCount] = zb; //add the token
+    zs[zCount] = zb; //add the commitment
     ds[zCount++] = db; //add the preventifier
     bytes8 root = merkle(0,0); //work out the Merkle root as it's now different
     currentRootIndex = roots.push(root)-1; //and save it to the list
   }
 
   /**
-  The split function splits a z-token into multiple z-tokens and transfers to the public of key recipient specified
+  The split function splits a commitment into multiple commitments and transfers
+  to the public of key recipient specified
   */
   function split() public {
     //verification contract
     bool result = sv.verifyTx(
-      proof.a,
-      proof.a_p,
-      proof.b,
-      proof.b_p,
-      proof.c,
-      proof.c_p,
-      proof.h,
-      proof.k);
+      proofs[msg.sender].a,
+      proofs[msg.sender].a_p,
+      proofs[msg.sender].b,
+      proofs[msg.sender].b_p,
+      proofs[msg.sender].c,
+      proofs[msg.sender].c_p,
+      proofs[msg.sender].h,
+      proofs[msg.sender].k,
+      msg.sender);
     require(result); //the proof must verify. The spice must flow.
-    bytes8 na = sv.getInputBits(0);
-    bytes8 zb1 = sv.getInputBits(128);
-    bytes8 zb2 = sv.getInputBits(192);
-    bytes8 db1 = sv.getInputBits(256); //TODO do not add if already in the list of double spend preventifier
-    bytes8 db2 = sv.getInputBits(320); //TODO do not add if already in the list of double spend preventifier
+    bytes8 na = sv.getInputBits(0, msg.sender);
+    bytes8 zb1 = sv.getInputBits(128, msg.sender);
+    bytes8 zb2 = sv.getInputBits(192, msg.sender);
+    bytes8 db1 = sv.getInputBits(256, msg.sender); //TODO do not add if already in the list of double spend preventifier
+    bytes8 db2 = sv.getInputBits(320, msg.sender); //TODO do not add if already in the list of double spend preventifier
     for (uint i=0; i<nCount; i++) { //check this is an unspent coin
       require(ns[i]!=na);
     }
-    /* for (uint j=0; j<zCount; j++) { //check the preventifier doesn't exist
-      require(ds[j]!= db);
-    } */
     ns[nCount++] = na; //remember we spent it
-    zs[zCount] = zb1; //add the token
+    zs[zCount] = zb1; //add the commitment
     ds[zCount++] = db1; //add the preventifier
-    zs[zCount] = zb2; //add the token
+    zs[zCount] = zb2; //add the commitment
     ds[zCount++] = db2; //add the preventifier
     bytes8 root = merkle(0,0); //work out the Merkle root as it's now different
     currentRootIndex = roots.push(root)-1; //and save it to the list
   }
 
   /**
-  This function is only needed because mint and transfer otherwise use too many
+  This function is only needed because otherwise mint and transfer use too many
   local variables for the limited stack space. Rather than pass a proof as
   parameters to these functions (more logical)
   */
@@ -212,29 +236,29 @@ contract TokenShield{
       uint[2] h,
       uint[2] k)
       public {
-    //this is long because I can't think of another way to equate memory with storage
-    proof.a[0] = a[0];
-    proof.a[1] = a[1];
-    proof.a_p[0] = a_p[0];
-    proof.a_p[1] = a_p[1];
-    proof.b[0][0] = b[0][0];
-    proof.b[0][1] = b[0][1];
-    proof.b[1][0] = b[1][0];
-    proof.b[1][1] = b[1][1];
-    proof.b_p[0] = b_p[0];
-    proof.b_p[1] = b_p[1];
-    proof.c[0] = c[0];
-    proof.c[1] = c[1];
-    proof.c_p[0] = c_p[0];
-    proof.c_p[1] = c_p[1];
-    proof.h[0] = h[0];
-    proof.h[1] = h[1];
-    proof.k[0] = k[0];
-    proof.k[1] = k[1];
+    //this is long, think of a better way
+    proofs[msg.sender].a[0] = a[0];
+    proofs[msg.sender].a[1] = a[1];
+    proofs[msg.sender].a_p[0] = a_p[0];
+    proofs[msg.sender].a_p[1] = a_p[1];
+    proofs[msg.sender].b[0][0] = b[0][0];
+    proofs[msg.sender].b[0][1] = b[0][1];
+    proofs[msg.sender].b[1][0] = b[1][0];
+    proofs[msg.sender].b[1][1] = b[1][1];
+    proofs[msg.sender].b_p[0] = b_p[0];
+    proofs[msg.sender].b_p[1] = b_p[1];
+    proofs[msg.sender].c[0] = c[0];
+    proofs[msg.sender].c[1] = c[1];
+    proofs[msg.sender].c_p[0] = c_p[0];
+    proofs[msg.sender].c_p[1] = c_p[1];
+    proofs[msg.sender].h[0] = h[0];
+    proofs[msg.sender].h[1] = h[1];
+    proofs[msg.sender].k[0] = k[0];
+    proofs[msg.sender].k[1] = k[1];
   }
 
   function getTokens() public view returns(bytes8[merkleWidth], uint root) {
-    //need the coins to compute a proof and also an index to look up the current
+    //need the commitments to compute a proof and also an index to look up the current
     //root.
     return (zs,currentRootIndex);
   }
@@ -257,8 +281,6 @@ contract TokenShield{
     if (r==lastRow) {
       return zs[t];
     } else {
-      //bytes32 parentLong = sha256(bytes16(merkle(r+1,2*t)) | (bytes16(merkle(r+1,2*t+1))>>64))<<192;
-      //bytes8 parent = bytes8(parentLong);
       return bytes8(sha256(merkle(r+1,2*t)^merkle(r+1,2*t+1))<<192);
     }
   }

@@ -1,214 +1,244 @@
-pragma solidity ^0.4.11;
+pragma solidity ^0.4.24;
 
-import "./ERC20Interface.sol/";
+import "./ERC20Interface.sol";
+import "./SafeMath.sol";
 
 /**
- * The OpsCoin is a kind of fiat currency which is mapped to each location address.
- * This contract provides functions to buy Coins,
- * withdraw, enable transaction fund and transfer fund
+ * @title OpsCoin V1 - ERC20 Token
+ *
+ * @dev Implementation of the basic standard token.
+ * https://github.com/ethereum/EIPs/blob/master/EIPS/eip-20.md
+ * Originally based on code by FirstBlood: https://github.com/Firstbloodio/token/blob/master/smart_contract/FirstBloodToken.sol
+ * Based on OpenZeppelin's version of the code by FirstBlood .
  */
 
 contract OpsCoin is ERC20Interface {
 
-    string public constant symbol = "OPS";
-    string public constant name = "Ops Coin";
+  using SafeMath for uint256;
 
-    // Owner of this contract
-    address public owner;
+  string public symbol;
+  string public  name;
+  address public owner;
+  uint256 public totalSupply;
 
-    // transaction struct
-    struct Transaction {
-        address from;
-        address to;
-        uint256 lockedTill;
-        uint256 amount;
-        bool enabled;
-        bool withdrawn;
-        bool isValid;
-        uint256 enableIndex;
-        uint256 withdrawIndex;
-    }
 
-    // creates mapping b/w asset transfer hash and transaction
-    mapping(bytes32 => Transaction) private transactions;
+  mapping (address => uint256) private balances;
+  mapping (address => mapping (address => uint256)) private allowed;
+  mapping (address => mapping (address => uint)) private timeLock;
 
-    // Creates a mapping b/w location address and opscoin
-    mapping(address => uint256) private balances;
 
-    // creates a mapping b/w sender location address and array of asset transfer hash
-    mapping(address => bytes32[]) private withdrawTransactionList;
+  constructor() {
+    symbol = "OPS";
+    name = "EY OpsCoin";
+    totalSupply = 1000000;
+    owner = msg.sender;
+    balances[owner] = totalSupply;
+    emit Transfer(address(0), owner, totalSupply);
+  }
 
-    // creates a mapping b/w receiver location address and array of asset transfer hash
-    mapping(address => bytes32[]) private enableTransactionList;
+  //only owner  modifier
+  modifier onlyOwner () {
+    require(msg.sender == owner);
+    _;
+  }
 
-    // creates a mapping b/w sender location address and array of asset transfer hash(withdrawn)
-    mapping(address => bytes32[]) private withdrawTransactionHistory;
+  /**
+  self destruct added by westlad
+  */
+  function close() public onlyOwner {
+    selfdestruct(owner);
+  }
 
-    // creates a mapping b/w receiver location address and array of asset transfer hash(withdrawn)
-    mapping(address => bytes32[]) private enableTransactionHistory;
+  /**
+  * @dev Gets the balance of the specified address.
+  * @param _address The address to query the balance of.
+  * @return An uint256 representing the amount owned by the passed address.
+  */
+  function balanceOf(address _address) public view returns (uint256) {
+    return balances[_address];
+  }
 
-    //only owner  modifier
-    modifier onlyOwner () {
-        require(msg.sender == owner);
-        _;
-    }
+  /**
+  * @dev Function to check the amount of tokens that an owner allowed to a spender.
+  * @param _owner address The address which owns the funds.
+  * @param _spender address The address which will spend the funds.
+  * @return A uint256 specifying the amount of tokens still available for the spender.
+  */
+  function allowance(address _owner, address _spender) public view returns (uint256)
+  {
+    return allowed[_owner][_spender];
+  }
 
-    /**
-     * Constructor function invoked during contract deployment
-     */
-    constructor () public {
-        owner = msg.sender;
-    }
+  /**
+  * @dev Total number of tokens in existence
+  */
+  function totalSupply() public view returns (uint256) {
+    return totalSupply;
+  }
 
-    /**
-     * Buy OpsCoin
-     * @param  _amount - no of coin
-     * @param _location - location address
-     */
-    function buyOpsCoin (uint256 _amount, address _location) public returns (bool success) {
-        require(_amount > 0);
-        balances[_location] += _amount;
-        return true;
-    }
 
-    /**
-     * convert OpsCoin to real money
-     * @param _location - location address
-     */
-    function convertOpsCoin (address _location) public returns (bool success) {
-        require(balances[_location] > 0);
-        balances[owner] += balances[_location];
-        balances[_location] = 0;
-        return true;
-    }
+  /**
+  * @dev Internal function that mints an amount of the token and assigns it to
+  * an account. This encapsulates the modification of balances such that the
+  * proper events are emitted.
+  * @param _account The account that will receive the created tokens.
+  * @param _amount The amount that will be created.
+  */
+  function mint(address _account, uint256 _amount) public {
+    require(_account != 0);
+    require(_amount > 0);
+    totalSupply = totalSupply.add(_amount);
+    balances[_account] = balances[_account].add(_amount);
+    emit Transfer(address(0), _account, _amount);
+  }
 
-    /**
-     * Get the coin the balance of a particular account
-     * @param  _location  - location address
-     */
-    function balanceOf(address _location) public constant returns (uint256 balance) {
-        return balances[_location];
-    }
+  /**
+  * @dev Internal function that burns an amount of the token of a given
+  * account.
+  * @param _account The account whose tokens will be burnt.
+  * @param _amount The amount that will be burnt.
+  */
+  function burn(address _account, uint256 _amount) public {
+    require(_account != 0);
+    require(_amount <= balances[_account]);
 
-    /**
-     * Transfer the opscoin from one location to another. This will basically set the withdrawn flag to true and
-     * move the transfer hash from active to history list
-     * @param  _transactionId - transaction Id of the transaction
-     */
-    function transferById (bytes32 _transactionId) public returns (bool) {
-        Transaction storage currentTransaction = transactions[_transactionId];
-        require(isValidTransaction(_transactionId) == true);
-        require(balances[currentTransaction.from] >= currentTransaction.amount);
-        //assert(msg.sender == transactions[_transactionId].from);
-        //require(currentTransaction.lockedTill > now);
-        require(currentTransaction.withdrawn != true);
-        balances[currentTransaction.to] += currentTransaction.amount;
-        balances[currentTransaction.from] -= currentTransaction.amount;
-        currentTransaction.withdrawn = true;
-        uint256 enableIndex = currentTransaction.enableIndex;
-        uint256 withdrawIndex = currentTransaction.withdrawIndex;
-        enableTransactionList[currentTransaction.from][enableIndex] = enableTransactionList[currentTransaction.from][enableTransactionList[currentTransaction.from].length - 1];
-        transactions[enableTransactionList[currentTransaction.from][enableIndex]].enableIndex = enableIndex;
-        withdrawTransactionList[currentTransaction.to][withdrawIndex] = withdrawTransactionList[currentTransaction.to][withdrawTransactionList[currentTransaction.to].length - 1];
-        transactions[withdrawTransactionList[currentTransaction.to][withdrawIndex]].withdrawIndex = withdrawIndex;
-        enableTransactionList[currentTransaction.from].length = enableTransactionList[currentTransaction.from].length - 1;
-        withdrawTransactionList[currentTransaction.to].length = withdrawTransactionList[currentTransaction.to].length - 1;
-        enableTransactionHistory[currentTransaction.from].push(_transactionId);
-        withdrawTransactionHistory[currentTransaction.to].push(_transactionId);
-      //  emit Transfer(currentTransaction.to, currentTransaction.from, currentTransaction.amount);
-        return true;
-    }
+    totalSupply = totalSupply.sub(_amount);
+    balances[_account] = balances[_account].sub(_amount);
+    emit Transfer(_account, address(0), _amount);
+  }
 
-    /**
-     * Initiate a transaction b/w sender and reciver location once a asset has been transfered
-     * @param  _transactionId - transaction hash  of the asset transfer
-     * @param  _from - asset receiver address
-     * @param  _to - asset sender address
-     * @param  _lockedTill - lock period
-     * @param  _amount - value of asset
-     * @param  _enabled - whether transaction is enabled ? default is true
-     * @param  _withdrawn - whether amount is withdrawn ? default is false
-     */
-    function enableTransaction (
-        bytes32 _transactionId,
-        address _from,
-        address _to,
-        uint256 _lockedTill,
-        uint256 _amount,
-        bool _enabled,
-        bool _withdrawn) public returns (bool success) {
-        require(isValidTransaction(_transactionId) != true);
-        transactions[_transactionId] = Transaction(_from, _to, _lockedTill, _amount, _enabled, _withdrawn, true, enableTransactionList[_from].length, withdrawTransactionList[_to].length);
-        withdrawTransactionList[_to].push(_transactionId);
-        enableTransactionList[_from].push(_transactionId);
-    //    emit EnableTransfer(transactions[_transactionId].from, transactions[_transactionId].to, transactions[_transactionId].lockedTill, transactions[_transactionId].amount, transactions[_transactionId].enabled, transactions[_transactionId].withdrawn);
-        return true;
-    }
+  /**
+  * @dev Internal function that burns an amount of the token of a given
+  * account, deducting from the sender's allowance for said account. Uses the
+  * internal burn function.
+  * @param _account The account whose tokens will be burnt.
+  * @param _amount The amount that will be burnt.
+  */
+  function burnFrom(address _account, uint256 _amount) public {
+    require(_amount <= allowed[_account][msg.sender]);
 
-    /**
-    * Returns an array of transfer hash mapped againt the asset sender. Mapping is created b/w this hash and transaction
-    * @param _location - location address
-     */
-    function getWithdrawTransactionList(address _location) public view returns (bytes32[]) {
-        return withdrawTransactionList[_location];
-    }
+    allowed[_account][msg.sender] = allowed[_account][msg.sender].sub(_amount);
+    emit Approval(_account, msg.sender, allowed[_account][msg.sender]);
+    burn(_account, _amount);
+  }
 
-    /**
-    * Returns an array of transfer hash mapped againt the asset receiver. Mapping is created b/w this hash and transaction
-    * @param _location - location address
-     */
-    function getEnableTransactionList(address _location) public view returns (bytes32[]) {
-        return enableTransactionList[_location];
-    }
+  /**
+  * @dev Transfer token for a specified address
+  * @param _to The address to transfer to.
+  * @param _value The amount to be transferred.
+  */
+  function transfer(address _to, uint256 _value) public returns (bool) {
+    require(_value <= balances[msg.sender]);
+    require(_to != address(0));
 
-    /**
-    * Returns an array of transfer hash mapped againt the asset sender which is already withdrawn. Mapping is created b/w this hash and transaction
-    * @param _location - location address
-     */
-    function getWithdrawTransactionHistory(address _location) public view returns (bytes32[]) {
-        return withdrawTransactionHistory[_location];
-    }
+    balances[msg.sender] = balances[msg.sender].sub(_value);
+    balances[_to] = balances[_to].add(_value);
+    emit Transfer(msg.sender, _to, _value);
+    return true;
+  }
 
-    /**
-    * Returns an array of transfer hash mapped againt the asset receiver which is already withdrawn. Mapping is created b/w this hash and transaction
-    * @param _location - location address
-     */
-    function getEnableTransactionHistory(address _location) public view returns (bytes32[]) {
-        return enableTransactionHistory[_location];
-    }
+  /**
+  * @dev Approve the passed address to spend the specified amount of tokens on behalf of msg.sender.
+  * @param _spender The address which will spend the funds.
+  * @param _value The amount of tokens to be spent.
+  */
+  function approve(address _spender, uint256 _value) public returns (bool) {
+    require(_spender != address(0));
 
-    /**
-     * Toggle a transaction
-     * @param _transactionId - transaction Id of the transaction
-     */
-    function toggleTransaction (bytes32 _transactionId) public returns(bool success) {
-        assert(isValidTransaction(_transactionId) == true);
-        transactions[_transactionId].enabled = !transactions[_transactionId].enabled;
-    //    emit ToggleTransfer(_transactionId);
-        return true;
-    }
+    allowed[msg.sender][_spender] = _value;
+    emit Approval(msg.sender, _spender, _value);
+    return true;
+  }
 
-    /**
-     * Returns details of the transaction
-     * @param  _transactionId - transaction Id of the transaction
-     */
-    function getTransaction (bytes32 _transactionId) public view returns (bytes32, address, address, uint256, uint256, bool, bool) {
-        assert(isValidTransaction(_transactionId) == true);
-        return (_transactionId,
-                transactions[_transactionId].from,
-                transactions[_transactionId].to,
-                transactions[_transactionId].lockedTill,
-                transactions[_transactionId].amount,
-                transactions[_transactionId].enabled,
-                transactions[_transactionId].withdrawn);
-    }
+  /**
+  * @dev Approve the passed address to spend the specified amount of tokens after a specfied amount of time on behalf of msg.sender.
+  * @param _spender The address which will spend the funds.
+  * @param _value The amount of tokens to be spent.
+  * @param _timeLockTill The time until when this amount cannot be withdrawn
+  * @notice © Copyright 2018 EYGS LLP and/or other members of the global Ernst & Young/EY network; pat. pending.
+  */
+  function approveAt(address _spender, uint256 _value, uint _timeLockTill) public returns (bool) {
 
-    /**
-     * Check if transaction is valid
-     * @param  _transactionId - transaction Id of the transaction
-     */
-    function isValidTransaction(bytes32 _transactionId) private view returns (bool success) {
-        return transactions[_transactionId].isValid;
-    }
+    require(_spender != address(0));
+
+    allowed[msg.sender][_spender] = _value;
+    timeLock[msg.sender][_spender] = _timeLockTill;
+    emit Approval(msg.sender, _spender, _value);
+    return true;
+  }
+
+  /**
+  * @dev Transfer tokens from one address to another
+  * @param _from address The address which you want to send tokens from
+  * @param _to address The address which you want to transfer to
+  * @param _value uint256 the amount of tokens to be transferred
+  */
+  function transferFrom(address _from, address _to, uint256 _value) public returns (bool)
+  {
+    require(_value <= balances[_from]);
+    require(_value <= allowed[_from][msg.sender]);
+    require(_to != address(0));
+
+    balances[_from] = balances[_from].sub(_value);
+    balances[_to] = balances[_to].add(_value);
+    allowed[_from][msg.sender] = allowed[_from][msg.sender].sub(_value);
+    emit Transfer(_from, _to, _value);
+    return true;
+  }
+
+  /**
+  * @dev Transfer tokens from one address to another
+  * @param _from address The address which you want to send tokens from
+  * @param _to address The address which you want to transfer to
+  * @param _value uint256 the amount of tokens to be transferred
+  * @notice © Copyright 2018 EYGS LLP and/or other members of the global Ernst & Young/EY network; pat. pending.
+  */
+  function transferFromAt(address _from, address _to, uint256 _value) public returns (bool)
+  {
+    require(_value <= balances[_from]);
+    require(_value <= allowed[_from][msg.sender]);
+    require(_to != address(0));
+    require(block.timestamp > timeLock[_from][msg.sender]);
+
+    balances[_from] = balances[_from].sub(_value);
+    balances[_to] = balances[_to].add(_value);
+    allowed[_from][msg.sender] = allowed[_from][msg.sender].sub(_value);
+    emit Transfer(_from, _to, _value);
+    return true;
+  }
+
+  /**
+  * @dev Increase the amount of tokens that an owner allowed to a spender.
+  * approve should be called when allowed_[_spender] == 0. To increment
+  * allowed value is better to use this function to avoid 2 calls (and wait until
+  * the first transaction is mined)
+  * @param _spender The address which will spend the funds.
+  * @param _addedValue The amount of tokens to increase the allowance by.
+  */
+  function increaseAllowance(address _spender, uint256 _addedValue) public returns (bool)
+  {
+    require(_spender != address(0));
+
+    allowed[msg.sender][_spender] = (allowed[msg.sender][_spender].add(_addedValue));
+    emit Approval(msg.sender, _spender, allowed[msg.sender][_spender]);
+    return true;
+  }
+
+  /**
+  * @dev Decrease the amount of tokens that an owner allowed to a spender.
+  * approve should be called when allowed_[_spender] == 0. To decrement
+  * allowed value is better to use this function to avoid 2 calls (and wait until
+  * the first transaction is mined)
+  * @param _spender The address which will spend the funds.
+  * @param _subtractedValue The amount of tokens to decrease the allowance by.
+  */
+  function decreaseAllowance(address _spender, uint256 _subtractedValue) public returns (bool)
+  {
+    require(_spender != address(0));
+
+    allowed[msg.sender][_spender] = (allowed[msg.sender][_spender].sub(_subtractedValue));
+    emit Approval(msg.sender, _spender, allowed[msg.sender][_spender]);
+    return true;
+  }
 
 }
