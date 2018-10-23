@@ -79,10 +79,10 @@ The swarm public gateway run by Ethereum foundation is used here.
 * OpsCoin:	0x09b2d8b8741538abf56f47be76e37aed31f00e0d
 * OpsCoinShield:	0xe8d9f21b6b351c6bf993b1105497fe42d30df8bf
 * TokenShield:	0xeb7160d9fba402219ea868bc311e7d98688d3180
-* FT Mint & Burn Verifier:	0xcb4ccc716abe1b5be15870e2bfa12bf5f0b501e6
-* FT Transfer Verifier:	0x6b98f17897a5086ff3e7357290b36022798d8850
-* NFT Mint Verifier:	0x8d993aaf8e92c2027a5358b9914392050b03356d
-* NFT Transfer Verifier:	0xc5daef66b7752d9c5920c15e9e0145aa839843f3
+* FT Mint & Burn Verifier: 0x6b98f17897a5086ff3e7357290b36022798d8850
+* FT Transfer Verifier: 0xcb4ccc716abe1b5be15870e2bfa12bf5f0b501e6
+* NFT Mint Verifier: 0xc5daef66b7752d9c5920c15e9e0145aa839843f3
+* NFT Transfer Verifier: 0x8d993aaf8e92c2027a5358b9914392050b03356d
 * NFT Join Verifier:	0xf8cb6400dcf523bf6397a79bccd35a6af1a88edd
 * NFT Split Verifier:	0xb065dcb7651b448e042a0acc729ae64d2ea3ba51
 
