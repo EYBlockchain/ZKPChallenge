@@ -110,9 +110,6 @@ The swarm public gateway run by Ethereum foundation is used here.
 * First Tx Hash:	0x5e608f6caca686b3a3e7a901efdfcc94bc9a593891d7b8f910273ff56f9f1822
 * Last Tx Hash	0x83007c1a4af2ef1487fe020c1ea2f343c552d187a2f6aac52720abbefe5470e7
 
-## Demo video
-This video shows an overview with a GUI of the above mentioned protocols in action. This work is part of EY's OpsChain Public Edition product. OpsChain is a tokenisation based ecosystem level supply chain solution that provides various modules such as track and trace, inventory management etc ??
-
 ### Limitations
 * The usage of the terms 'fungible' and 'non-fungible' for token commitments means that the token commitments hold fungible or non-fungible assets by nature. It does not imply that the token commitments are tokens themselves that are ERC20 or ERC720 standard compatible.
 * It can be noted that inputs to proof verification are of 64 bits in length. Generally, this length is not secure against brute force attacks. In the later iterations of this work, these will be changed to 256 bits.
