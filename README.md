@@ -4,7 +4,7 @@ The world of blockchain technology is really split in two today.  On the one han
 
 Our goal at EY is to bridge this gap between public and private blockchains by enabling secure private transactions over public networks using Zero Knowledge Proofs. And we think we have done it.
 
-What we are showing (below) is a supply chain solution based on EY’s Ops Chain platform that is used today by private networks for managing and tracking supply chain operations, but all executed on the public network with zero knowledge proofs. What you see here is a prototype (We call it the Ops Chain Public Edition Prototype) and we’d like your help in finding the holes in our work.  
+What we are showing (below) is a supply chain solution based on EY’s Ops Chain platform that is used today by private networks for managing and tracking supply chain operations, but all executed on the public network with zero knowledge proofs. What you see here is a prototype (We call it the Ops Chain Public Edition Prototype) and we’d like your help in finding the holes in our work.  This platform leverages Nightfall to provide privacy
 
 **Can you tell us who sold what to whom and how much it cost?**
 
