@@ -117,5 +117,3 @@ The swarm public gateway run by Ethereum foundation is used here.
 * The maximum number of token commitments that the merkle tree currently holds is 256. The next iteration will increment this for practical use.
 * The usage of the term 'public dollar tokens' implies that OpsCoin is a stable coin that represents a dollar.
 * Some of the work for fungible token here is inspired by ZCash
-
-© 2018 EYGS LLP and/or other members of the global Ernst & Young/EY network; pat. pending.
